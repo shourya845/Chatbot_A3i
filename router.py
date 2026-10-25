@@ -12,6 +12,7 @@ def classify_intent(
     message: str, history: list[dict] | None = None, page_path: str = ""
 ) -> Intent:
     text = resolve_followup(message, history or [], page_path)
+    text = re.sub(r"\b(?:meating|meting)\b", "meeting", text, flags=re.I)
     if re.search(
         r"\b(?:book|schedule|request|arrange)\b.{0,30}\b(?:demo|meeting|call)\b|"
         r"\b(?:talk|speak|connect|contact)\b.{0,15}\b(?:sales|team)\b|"

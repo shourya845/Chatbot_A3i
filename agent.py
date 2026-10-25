@@ -17,10 +17,11 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_groq import ChatGroq
 from langchain_ollama import ChatOllama
 
-from conversation import clarification, mentioned_topics, resolve_followup
+from conversation import clarification, mentioned_products, mentioned_topics, pricing_overview, resolve_followup
 from tools import search_a3i_web
 from router import classify_intent
 from website import search_terms
+from leads import meeting_booking_url
 
 load_dotenv(Path(__file__).with_name(".env"))
 logger = logging.getLogger(__name__)
@@ -38,6 +39,8 @@ Evidence rules:
   company background and announcements only. Attribute external facts to their
   publisher; preserve known dates and disclose conflicts with citations.
   Never use pending/rejected sources or infer missing dates/currentness.
+- CEO, COO and founder are distinct roles. State a role only when evidence
+  explicitly supports it; founding a company does not establish its current CEO.
 - Define Apps, Ants and Agents from source descriptions, not names or examples.
   Preserve qualifiers: training time is not deployment time. Keep features and
   plans attached to their named product. Do not assume aliases, generalize one
@@ -49,6 +52,17 @@ Evidence rules:
 - Answer supported parts separately. Missing excerpt content does not prove the
   whole website lacks it. Say "I don't have verified details on that yet."
 - Pricing: use official product evidence, never illustrative demo numbers.
+  A real published subscription or founding offer on an official demo-request
+  page is pricing evidence; distinguish it from simulated example data.
+  Never select a product just because its price appears in retrieved evidence.
+  Do not transfer plans between products based only on matching workflows,
+  similar names or sharing a page.
+  If official navigation explicitly links the requested product to a differently
+  named product page, explain that link and report the plans shown on that linked
+  page under its published name. Do not claim the names are interchangeable.
+  In that case, do not refuse pricing solely because the linked page uses a
+  different name: answer "The website links X to Y; that page lists...".
+  Preserve founding-offer eligibility, duration and limits with its price.
   "Call for Pricing" means contact A3i. Include a supported contact step or the
   Book a Meeting form even when an exact price is missing. General service
   pricing does not establish a particular product's pricing policy.
@@ -85,8 +99,13 @@ REDIRECT = (
     "I can help with information published on A3i's website. "
     "What would you like to know about A3i?"
 )
-DEMO_REPLY = ("Use the **Book a Meeting** button to open the demo request form. "
-              "Submitting it sends a request; it does not confirm an appointment.")
+DEMO_REPLY = (
+    f"Choose an available time and complete your booking here: {meeting_booking_url()} "
+    "Your appointment is confirmed only when the booking service confirms it."
+    if meeting_booking_url() else
+    "Use the **Book a Meeting** button to open the demo request form. "
+    "Submitting it sends a request; it does not confirm an appointment."
+)
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
 MAX_TOOL_ROUNDS = 4
 MAX_TOOL_CALLS_PER_ROUND = 2
@@ -309,12 +328,51 @@ def _finish_retrieval(messages: list[dict], message: str) -> list[dict]:
     detailed = re.search(
         r"\b(detail|detailed|thorough|comprehensive|step.by.step)\b", message, re.I
     )
-    if detailed:
+    if pricing_overview(message):
+        style = (
+            "Give a compact pricing table covering every distinct product in the retrieved evidence, "
+            "with supported plan prices, currency, billing interval and usage limits. "
+            "For products without verified pricing, mark it unverified instead of omitting them. "
+            "Cite the relevant source for each verified price. Keep differently named products "
+            "separate unless evidence explicitly establishes an alias. State that coverage is "
+            "limited to retrieved sources; do not claim a complete current catalog. "
+            "The 60-word limit does not apply to this requested comparison."
+        )
+    elif mentioned_products(message) and re.search(r"\b(?:pric(?:e|es|ing)|costs?|plans?|subscriptions?)\b", message, re.I):
+        style = (
+            "Show every published plan for the requested product in a compact table, with "
+            "supported prices, currency, billing interval and usage limits. Preserve offer "
+            "eligibility and duration. If using an explicitly linked page with a different "
+            "product name, explain the navigation link and show its published plans rather "
+            "than saying pricing is unverified solely because of the name difference. "
+            "Cite the source next to the prices. Do not call a limited founding offer a "
+            "standard price; preserve the first-N-customer cap if stated. "
+            "The 60-word limit does not apply to the requested pricing plans."
+        )
+    elif detailed:
         style = "Use the level of detail the user explicitly requested."
     else:
         style = (
             "Keep the answer within 60 words excluding link URLs."
         )
+    if mentioned_products(message):
+        rows = []
+        for item in messages:
+            if item.get("role") == "tool" and item.get("tool_name") == "search_a3i_web":
+                rows.extend(json.loads(item["content"]).get("results", []))
+        for row in rows:
+            for name, target_url in re.findall(
+                r"(?m)^([^\n:]+): go to [^\n]+? — linked product page: (https://[^\s]+)",
+                row.get("content", ""),
+            ):
+                target = next((page for page in rows if page.get("url") == target_url), None)
+                if name in mentioned_products(message) and target and target.get("title"):
+                    opening = f'The official website links {name} to {target["title"]}; the linked page lists these plans.'
+                    style += (
+                        " Begin with this factual navigation statement: " + json.dumps(opening)
+                        + " Describe only the link: do not call either product a feature, bundle, "
+                        "rename or interchangeable alias of the other."
+                    )
     messages.append(
         {
             "role": "system",
@@ -416,7 +474,7 @@ async def prepare_answer(
             )
 
         if retrieval_complete:
-            return _finish_retrieval(messages, message)
+            return _finish_retrieval(messages, resolved)
 
     return FALLBACK
 

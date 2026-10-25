@@ -6,28 +6,45 @@
   },
   {
     "id": "sol-notes-ai",
+    "product": true,
     "title": "Notes AI",
     "keywords": "/products/ai-note Notes AI NeXtory meeting notes transcript recording"
   },
   {
     "id": "ind-recruiters",
+    "product": true,
     "title": "AI for Recruiters",
-    "keywords": "/products/ai-hire AI for Recruiters SpeedHire SpeedRec AI-Hire recruitment hiring candidate screening"
+    "keywords": "/products/ai-hire AI for Recruiters Sp3dhire SpeedHire SpeedRec AI-Hire recruitment hiring candidate screening"
   },
   {
     "id": "prod-lead",
+    "product": true,
     "title": "AI-Lead",
-    "keywords": "/products/ai-lead AI-Lead Invenio lead discovery"
+    "keywords": "/products/ai-lead AI-Lead lead discovery"
   },
   {
     "id": "prod-advisor",
+    "product": true,
     "title": "AI-Advisor",
     "keywords": "/products/ai-advisor AI-Advisor "
   },
   {
     "id": "prod-marketing",
+    "product": true,
     "title": "AI-Marketing",
-    "keywords": "/products/ai-marketing AI-Marketing Send3r marketing email campaign"
+    "keywords": "/products/ai-marketing AI-Marketing marketing content social media campaign"
+  },
+  {
+    "id": "send3r",
+    "product": true,
+    "title": "Send3r",
+    "keywords": "Send3r email outreach campaign pricing plans"
+  },
+  {
+    "id": "send3r-demo",
+    "product": true,
+    "title": "Send3r demo and founding offer",
+    "keywords": "Send3r pricing plans founding offer Pro demo"
   },
   {
     "id": "services",
@@ -42,7 +59,7 @@
   {
     "id": "contact",
     "title": "Start Accelerating Today",
-    "keywords": "/contact Start Accelerating Today contact email address location office phone sales quote pricing demo"
+    "keywords": "/contact Start Accelerating Today Invenio contact email address location office phone sales quote pricing demo"
   },
   {
     "id": "collaborations",
@@ -196,6 +213,7 @@
   },
   {
     "id": "sol-video-agent",
+    "product": true,
     "title": "Video Agent",
     "keywords": "/solutions/video-agent Video Agent Video AI A3i Video Studio"
   },

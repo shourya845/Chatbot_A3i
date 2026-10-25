@@ -7,6 +7,7 @@ PRODUCTS = (
     "NeXtory",
     "SpeedHire",
     "SpeedRec",
+    "Sp3dhire",
     "H3iVE",
     "Send3r",
     "Invenio",
@@ -14,6 +15,7 @@ PRODUCTS = (
     "Video AI",
     "3i Voice Assist",
     "AI-Note",
+    "Notes AI",
     "AI-Hire",
     "AI-Lead",
     "AI-Advisor",
@@ -62,6 +64,15 @@ def mentioned_products(text: str) -> list[str]:
     ]
 
 
+def pricing_overview(text: str) -> bool:
+    """Recognize catalog-wide pricing without expanding a single product's plans."""
+    return bool(
+        re.search(r"\b(?:pric(?:e|es|ing)|costs?|fees?|plans?|subscriptions?)\b", text, re.I)
+        and not mentioned_products(text)
+        and re.search(r"\b(?:products|all|every|each|entire)\b", text, re.I)
+    )
+
+
 def mentioned_topics(text: str) -> list[str]:
     """Return explicit product or website topics, in display order."""
     products = mentioned_products(text)
@@ -85,12 +96,21 @@ def recent_topics(history: list[dict]) -> list[str]:
 
 def clarification(message: str, history: list[dict], page_path: str = "") -> str | None:
     """Ask for a topic when a reference cannot be resolved safely."""
+    if pricing_overview(resolve_followup(message, history, page_path)):
+        return None
     if mentioned_topics(message) or re.search(
         r"\bthis (page|website|site|company)\b", message, re.I
     ):
         return None
 
     choices = recent_topics(history)
+    if re.search(r"\b(?:pric(?:e|es|ing)|costs?|fees?|quotes?|subscriptions?)\b", message, re.I):
+        if not choices and page_path not in ("", "/"):
+            return None
+        if not choices or (len(choices) == 1 and choices[0] not in PRODUCTS):
+            return "Which A3i product or service would you like pricing for?"
+        if len(choices) > 1:
+            return "Which product do you mean: " + ", ".join(choices[:3]) + "?"
     stripped_message = message.strip(" ?!.")
     is_vague = bool(VAGUE_FOLLOW_UP.fullmatch(stripped_message))
     is_vague = is_vague or bool(
@@ -113,6 +133,14 @@ def clarification(message: str, history: list[dict], page_path: str = "") -> str
 def resolve_followup(message: str, history: list[dict], page_path: str = "") -> str:
     """Add the last clear topic without choosing between ambiguous options."""
     products = mentioned_products(message)
+    if pricing_overview(message):
+        return message
+    if not products and re.fullmatch(r"(?:all(?: of them| products)?|every product|each product)[?!. ]*", message, re.I):
+        previous_question = next(
+            (item["content"] for item in reversed(history[-6:]) if item["role"] == "user"), ""
+        )
+        if re.search(r"\b(?:pric(?:e|es|ing)|costs?|fees?|plans?|subscriptions?)\b", previous_question, re.I):
+            return "All A3i product pricing: " + message
     if (
         len(products) == 1
         and message.strip(" ?!.").casefold() == products[0].casefold()

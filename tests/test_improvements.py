@@ -72,6 +72,22 @@ class CacheTests(unittest.TestCase):
 
 
 class FollowupTests(unittest.TestCase):
+    def test_all_product_pricing_overrides_previous_single_product(self):
+        from conversation import clarification, pricing_overview
+        history = [{'role': 'user', 'content': 'What is NeXtory?'}]
+        question = 'Show pricing for all products'
+        self.assertIsNone(clarification(question, history))
+        self.assertEqual(resolve_followup(question, history), question)
+        self.assertTrue(pricing_overview(question))
+        self.assertFalse(pricing_overview('Show all NeXtory pricing plans'))
+
+    def test_all_products_can_answer_pricing_clarification(self):
+        from conversation import clarification
+        history = [{'role': 'user', 'content': 'what is the price'},
+                   {'role': 'assistant', 'content': 'Which A3i product or service would you like pricing for?'}]
+        self.assertEqual(resolve_followup('all of them', history), 'All A3i product pricing: all of them')
+        self.assertIsNone(clarification('all of them', history))
+
     def test_product_selection_keeps_the_original_pricing_question(self):
         history = [
             {"role": "user", "content": "How can I know the price?"},
@@ -108,6 +124,65 @@ class FollowupTests(unittest.TestCase):
 
 
 class ModelStreamTests(unittest.IsolatedAsyncioTestCase):
+    async def test_linked_pricing_instructions_use_only_retrieved_navigation(self):
+        from agent import _finish_retrieval
+        rows = [
+            {'url': 'https://a3i-accel.com/', 'content':
+             'NeXtory: go to Notes AI — linked product page: https://a3i-accel.com/partials/sol-notes-ai.html'},
+            {'url': 'https://a3i-accel.com/partials/sol-notes-ai.html', 'title': 'Notes AI',
+             'content': 'Free $0 / month, Pro $29 / month'},
+        ]
+        def messages():
+            return [{'role': 'system', 'content': ''}, {'role': 'tool',
+                    'tool_name': 'search_a3i_web', 'content': json.dumps({'results': rows})}]
+        prepared = _finish_retrieval(messages(), 'NeXtory pricing')
+        self.assertIn('The official website links NeXtory to Notes AI', prepared[-1]['content'])
+        self.assertIn('do not call either product a feature, bundle', prepared[-1]['content'])
+        rows.pop()
+        self.assertNotIn('Begin with this factual navigation statement',
+                         _finish_retrieval(messages(), 'NeXtory pricing')[-1]['content'])
+
+    async def test_all_pricing_followup_searches_overview_and_requests_table(self):
+        from agent import prepare_answer
+        history = [{'role': 'user', 'content': 'what is the price'},
+                   {'role': 'assistant', 'content': 'Which A3i product or service would you like pricing for?'}]
+        reply = {'role': 'assistant', 'tool_calls': [{'function': {
+            'name': 'search_a3i_web', 'arguments': {'query': 'AI-Note pricing'}}}]}
+        with patch('agent.call_llm', new=AsyncMock(return_value=reply)), patch('agent.search_a3i_web') as search:
+            search.invoke.return_value = {'results': [
+                {'url': 'https://a3i-accel.com/', 'content': 'Official product pricing evidence'}]}
+            prepared = await prepare_answer('all of them', history)
+        search.invoke.assert_called_once_with({'query': 'All A3i product pricing: all of them'})
+        self.assertIn('compact pricing table', prepared[-1]['content'])
+        self.assertIn('60-word limit does not apply', prepared[-1]['content'])
+
+    async def test_general_pricing_asks_for_product_without_search_or_model(self):
+        from agent import clarification
+        with patch('agent.call_llm', new=AsyncMock()) as model, patch('agent.search_a3i_web') as search:
+            for question in ('tell me about the price', 'what is the price of A3i', 'How much does it cost?'):
+                with self.subTest(question=question):
+                    answer = await chat(question, [])
+                    self.assertIn('Which A3i product or service', answer)
+                    self.assertEqual(answer, ''.join([part async for part in stream_chat(question, [])]))
+            model.assert_not_awaited()
+            search.invoke.assert_not_called()
+        self.assertIsNone(clarification('what is price of SpeedRec', []))
+        self.assertIsNone(clarification('tell me the price', [
+            {'role': 'user', 'content': 'Tell me about SpeedRec'}]))
+        self.assertIsNone(clarification('what is the price', [], '/products/ai-note'))
+
+    async def test_product_catalog_then_generic_price_requires_selection(self):
+        history = [{'role': 'assistant', 'content': 'NeXtory, Send3r, SpeedRec and Invenio.'}]
+        with patch('agent.call_llm', new=AsyncMock()) as model:
+            answer = await chat('tell me about the price', history)
+        self.assertIn('Which product', answer)
+        model.assert_not_awaited()
+
+    async def test_pricing_product_selection_preserves_question(self):
+        history = [{'role': 'user', 'content': 'tell me about the price'},
+                   {'role': 'assistant', 'content': 'Which A3i product or service would you like pricing for?'}]
+        self.assertEqual(resolve_followup('SpeedRec', history), 'SpeedRec: tell me about the price')
+
     async def test_missing_pricing_evidence_includes_contact_step_in_chat_and_stream(self):
         reply = {"role": "assistant", "tool_calls": [{"function": {
             "name": "search_a3i_web", "arguments": {"query": "NeXtory pricing"}}}]}

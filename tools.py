@@ -23,7 +23,7 @@ load_dotenv(Path(__file__).with_name(".env"))
 logger = logging.getLogger(__name__)
 CACHE_TTL = 15 * 60
 MAX_CACHE_ENTRIES = 128
-OFFICIAL_HOSTS = {"a3i-accel.com", "www.a3i-accel.com"}
+OFFICIAL_HOSTS = {"a3i-accel.com", "www.a3i-accel.com", "send3r.a3i-accel.com"}
 search_cache: OrderedDict = OrderedDict()
 cache_lock = Lock()
 
@@ -131,10 +131,10 @@ def _search_tavily(query: str) -> dict:
         max_results=3,
         topic="general",
         search_depth="basic",
-        include_domains=["a3i-accel.com"],
+        include_domains=sorted(OFFICIAL_HOSTS),
         include_raw_content=True,
     )
-    response = search.invoke({"query": query, "include_domains": ["a3i-accel.com"]})
+    response = search.invoke({"query": query, "include_domains": sorted(OFFICIAL_HOSTS)})
     if isinstance(response, str) and "no search results" in response.lower():
         return {"results": []}
     if not isinstance(response, dict):
@@ -173,6 +173,15 @@ def search_a3i_web(query: str) -> dict:
     return official
 
 
+def _matches_question(pages: list[dict], query: str) -> bool:
+    """Check topic coverage, not whether the evidence proves an answer."""
+    terms = search_terms(query) - {"company", "background", "information"}
+    content_terms = search_terms("\n".join(page["content"] for page in pages))
+    required = terms & {"ceo", "coo", "founder", "pricing"}
+    # shortcut: lexical coverage misses paraphrases, upgrade if real questions show gaps.
+    return required <= content_terms and (not terms or bool(terms & content_terms))
+
+
 def _search_official(query: str) -> dict:
     """Cache official evidence separately from revocable external approvals."""
     query = _search_query(query)
@@ -180,6 +189,7 @@ def _search_official(query: str) -> dict:
     cached = _cached_result(key)
     if cached is not None:
         return cached
+    result = {"results": []}
     try:
         pages = website_results(query)
         if pages:
@@ -189,21 +199,35 @@ def _search_official(query: str) -> dict:
                  "retrieved_at": datetime.now(timezone.utc).isoformat()}
                 for page in pages
             ]}
-            _cache_result(key, result)
-            return result
+            if _matches_question(result["results"], query):
+                _cache_result(key, result)
+                return result
         if not os.getenv("TAVILY_API_KEY"):
+            if result["results"]:
+                _cache_result(key, result)
+                return result
             return {"error": "Tavily search is not configured."}
         logger.info("Calling Tavily search on the official A3i domain")
-        result = _search_tavily(query)
+        fallback = _search_tavily(query)
+        if fallback.get("results"):
+            # Prefer search excerpts when the same URL's direct excerpt missed the topic.
+            found_urls = {page["url"] for page in fallback["results"]}
+            result = {"results": fallback["results"] + [
+                page for page in result["results"] if page["url"] not in found_urls
+            ]}
+        elif not result["results"]:
+            return fallback
         if result.get("results"):
             _cache_result(key, result)
         return result
     except ToolException as error:
+        if result["results"]:
+            return result
         if "no search results" in str(error).lower():
             return {"results": []}
         return search_failure(error)
     except Exception as error:
-        return search_failure(error)
+        return result if result["results"] else search_failure(error)
 
 
 def search_failure(error) -> dict:

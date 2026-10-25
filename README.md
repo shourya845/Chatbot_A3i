@@ -48,8 +48,11 @@ flowchart TD
 
 1. Check the request's scope, resolve follow-ups, and ask for clarification when needed.
 2. Return simple greetings, refusals, or demo guidance directly.
+   General pricing questions without a clear product, service, or page context ask for clarification before searching. A product selected in reply retains the original pricing question. Prices for differently named products are not interchangeable without explicit source evidence.
+   Ask "Show pricing for all products" (or answer a pricing clarification with "all of them") for a catalog pricing overview. This reads the homepage and all pages marked `product` in `website_sources.json`, rather than only two pages. The answer instructions request a sourced table, including unverified pricing, without the normal 60-word limit. Coverage depends on the catalog and successfully retrieved pages; it is not a guarantee of every current product.
+   Named-product retrieval prioritizes its catalog product pages. Send3r uses its fixed official subdomain homepage and public demo/offer page, rather than AI-Marketing. Official navigation labels are preserved so answers can explain that NeXtory links to Notes AI and SpeedRec links to AI for Recruiters, while reporting plans under their published product names. Invenio follows the homepage/contact sources, not an assumed AI-Lead alias. Founding offers must retain eligibility and duration; unavailable prices must not be invented.
 3. For knowledge questions, ask the LLM to call `search_a3i_web`.
-4. Retrieve up to two relevant official pages from the fixed catalog in `website_sources.json`. Read their public HTML fragments and select relevant excerpts. If direct retrieval finds no usable pages, use Tavily when configured.
+4. Retrieve up to two relevant official pages from the fixed catalog in `website_sources.json`. Read their public HTML fragments and select relevant excerpts. If no pages are usable, or excerpts fail a keyword coverage check, try official-domain Tavily search when configured. CEO, COO, founder, and pricing questions require their respective terms in the excerpts to skip this fallback. This is a relevance heuristic, not proof that a page answers the question. Keep downloaded evidence if fallback search fails; external evidence still requires review and remains restricted to company-background questions.
 5. Pass the evidence back to the LLM for its final answer. The shared final-answer instructions apply to both normal and streaming chat.
 6. Remove generated URLs that were not retrieved. This validates link destinations, not whether every claim is supported.
 
@@ -259,6 +262,23 @@ Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8000/leads' -ContentType '
 Success returns `lead_id` and `status: saved`. This example writes a synthetic lead to your local database. Reuse the same `request_id` when retrying the same submission; different details under an existing ID return HTTP 409.
 
 Records are stored in `data/leads.sqlite3`. Saving a lead does **not** book a calendar appointment, send an email, or notify a sales team automatically.
+
+### Request a meeting in terminal chat
+
+Say `schedule a meeting for me` or `book a demo` in `python chat_cli.py`.
+The terminal collects your name, company, contact email, discussion topic and optional preferred time.
+Enter a preferred time with a timezone, for example `2026-12-01T15:00+05:30`, or leave it blank.
+Review the details and type `yes` to save, or type `cancel` at any collection step.
+Contact details are collected locally and are not added to model conversation history.
+This saves a request only: no team notification or calendar invitation is sent, and the preferred time is not confirmed.
+
+For an existing scheduling service, set `MEETING_BOOKING_URL` to your HTTPS booking-page URL in `.env`, then restart the chatbot/backend.
+The terminal and website chatbot will direct visitors to that page to choose a time and complete booking.
+The external booking service handles availability, confirmation and invitations.
+Without this setting, website chat keeps its existing Book a Meeting form guidance.
+
+`POST /leads` also accepts optional `email` and timezone-aware ISO `preferred_time` fields.
+Existing form submissions remain compatible; the database gains these columns on the next save while retaining old records.
 
 ## Tests and answer evaluation
 

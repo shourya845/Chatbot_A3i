@@ -111,7 +111,8 @@ class SearchAndMemoryTests(unittest.TestCase):
             ]}
             result = search_a3i_web.invoke({"query": "A3i"})
             self.assertEqual(len(result["results"]), 1)
-            self.assertEqual(search.call_args.kwargs["include_domains"], ["a3i-accel.com"])
+            from tools import OFFICIAL_HOSTS
+            self.assertEqual(search.call_args.kwargs["include_domains"], sorted(OFFICIAL_HOSTS))
 
     def test_missing_key_returns_error(self):
         with patch.dict("os.environ", {"TAVILY_API_KEY": ""}), patch("tools.TavilySearch") as search:

@@ -18,6 +18,9 @@ class ExternalSourceTests(unittest.TestCase):
         environment = patch.dict('os.environ', {'TAVILY_API_KEY': ''})
         environment.start()
         self.addCleanup(environment.stop)
+        fallback = patch('tools._search_tavily', return_value={'results': []})
+        fallback.start()
+        self.addCleanup(fallback.stop)
         search_cache.clear()
         self.item = {
             'url': 'https://www.linkedin.com/company/a3i-accelerators',
