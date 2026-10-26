@@ -1,0 +1,72 @@
+{
+  "verified_on": "2026-10-26",
+  "source": "https://a3i-accel.com/",
+  "products": [
+    {
+      "name": "NeXtory",
+      "description": "Meeting capture and action items",
+      "url": "https://a3i-accel.com/partials/sol-notes-ai.html",
+      "linked_page": "Notes AI"
+    },
+    {
+      "name": "H3ive",
+      "description": "Agent coordination and task completion",
+      "url": "https://a3i-accel.com/",
+      "linked_page": null
+    },
+    {
+      "name": "Send3r",
+      "description": "Email campaign scheduling",
+      "url": "https://send3r.a3i-accel.com/",
+      "linked_page": null
+    },
+    {
+      "name": "SpeedRec",
+      "description": "Candidate enrichment and shortlisting",
+      "url": "https://a3i-accel.com/partials/ind-recruiters.html",
+      "linked_page": "AI for Recruiters"
+    },
+    {
+      "name": "Invenio",
+      "description": "Lead discovery and outreach preparation",
+      "url": "https://a3i-accel.com/partials/contact.html",
+      "linked_page": "Contact"
+    },
+    {
+      "name": "Video AI",
+      "description": "Video creation from a brief",
+      "url": "https://a3i-accel.com/partials/contact.html",
+      "linked_page": "Contact"
+    },
+    {
+      "name": "AI-Note",
+      "description": "Meeting notes",
+      "url": "https://a3i-accel.com/partials/sol-notes-ai.html",
+      "linked_page": "Notes AI"
+    },
+    {
+      "name": "Sp33dhire",
+      "description": "Recruiting",
+      "url": "https://a3i-accel.com/partials/ind-recruiters.html",
+      "linked_page": "AI for Recruiters"
+    },
+    {
+      "name": "AI-Lead",
+      "description": "Lead discovery; early access",
+      "url": "https://a3i-accel.com/partials/prod-lead.html",
+      "linked_page": null
+    },
+    {
+      "name": "AI-Advisor",
+      "description": "Early access",
+      "url": "https://a3i-accel.com/partials/prod-advisor.html",
+      "linked_page": null
+    },
+    {
+      "name": "AI-Marketing",
+      "description": "Marketing; early access",
+      "url": "https://a3i-accel.com/partials/prod-marketing.html",
+      "linked_page": null
+    }
+  ]
+}

@@ -29,6 +29,10 @@ class RouterTests(unittest.IsolatedAsyncioTestCase):
             "Can A3i reduce operating costs, and what is the price?": "pricing",
             "I want a trial": "demo",
             "Schedule a meeting": "demo",
+            "I want to book a product demonstration.": "demo",
+            "Schedule a demo": "demo",
+            "Book a product walkthrough": "demo",
+            "What does a demonstration cost?": "pricing",
         }
         for message, expected in cases.items():
             with self.subTest(message=message):

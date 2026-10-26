@@ -208,7 +208,6 @@ class ModelStreamTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_website_topic_fallback_searches_if_model_skips_tool(self):
         replies = [{"role": "assistant", "content": "Unverified privacy claim."},
-                   {"role": "assistant", "content": "Unverified privacy claim."},
                    {"role": "assistant", "content": "Only the retrieved policy information."}]
         with patch("agent.call_llm", new=AsyncMock(side_effect=replies)), patch("agent.search_a3i_web") as search:
             search.invoke.return_value = {"results": [{"url": "https://a3i-accel.com/", "content": "Official policy information."}]}

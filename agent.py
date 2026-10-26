@@ -118,6 +118,20 @@ CONVERSATION_REPLIES = {
 }
 
 
+def log_provider_failure(provider, operation, error):
+    # Report useful diagnostics without logging arbitrary provider text or credentials.
+    response = getattr(error, "response", None)
+    status = getattr(error, "status_code", None) or getattr(response, "status_code", None)
+    text = str(error).casefold()
+    detail = next((label for label in (
+        "empty model response", "invalid tool call", "output limit", "not found", "timed out",
+        "tokens per minute", "tokens per day", "requests per minute", "requests per day",
+    ) if label in text), "provider request failed")
+    logger.warning("%s %s failed (%s; model=%s; status=%s; reason=%s)",
+                   provider, operation, type(error).__name__,
+                   GROQ_MODEL if provider == "groq" else MODEL, status, detail)
+
+
 @lru_cache(maxsize=2)
 def provider_model(provider: str):
     if provider == "groq":
@@ -127,8 +141,10 @@ def provider_model(provider: str):
     api_key = os.getenv("OLLAMA_API_KEY", "").strip()
     if api_key:
         client_kwargs["headers"] = {"Authorization": f"Bearer {api_key}"}
+    # GPT-OSS uses reasoning effort levels rather than a Boolean thinking switch.
     return ChatOllama(model=MODEL, base_url=OLLAMA_URL, temperature=0,
-                      reasoning=False, num_ctx=4096, num_predict=400,
+                      reasoning="low" if MODEL.startswith("gpt-oss") else False,
+                      num_ctx=4096, num_predict=2048,
                       keep_alive="2m", client_kwargs=client_kwargs)
 
 
@@ -142,7 +158,7 @@ def model_candidates(allow_tools=True):
             model = provider_model(provider)
             yield provider, model.bind_tools([search_a3i_web]) if allow_tools else model
         except Exception as error:
-            logger.warning("%s setup failed (%s)", provider, type(error).__name__)
+            log_provider_failure(provider, "setup", error)
 
 
 def cool_down_groq(error):
@@ -203,13 +219,15 @@ async def model_tokens(messages):
                 if isinstance(chunk.content, str) and chunk.content:
                     emitted = True
                     yield chunk.content
+                if chunk.response_metadata.get("done_reason") == "length" or chunk.response_metadata.get("finish_reason") == "length":
+                    raise ValueError("Answer exceeded output limit")
             if not emitted:
                 raise ValueError("Empty model response")
             return
         except Exception as error:
             if provider == "groq":
                 cool_down_groq(error)
-            logger.warning("%s stream failed (%s)", provider, type(error).__name__)
+            log_provider_failure(provider, "stream", error)
             if emitted:
                 raise ValueError("Answer interrupted; please retry") from None
     raise ValueError("No model provider is available")
@@ -240,8 +258,12 @@ async def call_llm(messages: list[dict], allow_tools=True) -> dict:
         try:
             logger.info("Calling %s", provider)
             reply = await model.ainvoke(langchain_messages(messages, final=not allow_tools))
+            if reply.response_metadata.get("done_reason") == "length" or reply.response_metadata.get("finish_reason") == "length":
+                raise ValueError("Answer exceeded output limit")
             if reply.invalid_tool_calls:
                 raise ValueError("Invalid tool call")
+            if not reply.tool_calls and not (reply.content or "").strip():
+                raise ValueError("Empty model response")
             return {
                 "role": "assistant",
                 "content": reply.content or "",
@@ -253,7 +275,7 @@ async def call_llm(messages: list[dict], allow_tools=True) -> dict:
         except Exception as error:
             if provider == "groq":
                 cool_down_groq(error)
-            logger.warning("%s call failed (%s)", provider, type(error).__name__)
+            log_provider_failure(provider, "call", error)
     raise ValueError("No model provider is available")
 
 
@@ -412,13 +434,27 @@ async def prepare_answer(
     logger.info("Intent: %s", intent)
     if intent == "demo":
         return DEMO_REPLY
+    if re.search(r"\b(?:list|show|what|which|name)\b.*\b(?:all|every|entire)\b.*\bproducts?\b", text, re.I) and intent != "pricing":
+        try:
+            catalog = json.loads(Path(__file__).with_name("product_catalog.json").read_text(encoding="utf-8"))
+            lines = []
+            for product in catalog["products"]:
+                line = f'- [{product["name"]}]({product["url"]}): {product["description"]}'
+                if product.get("linked_page"):
+                    line += f'. Website links to {product["linked_page"]}.'
+                lines.append(line)
+            return (f'Product names in our maintained catalog, checked {catalog["verified_on"]}:\n\n'
+                    + "\n".join(lines)
+                    + "\n\nDifferent names may link to the same page; this does not establish an alias. "
+                    "This covers the named products in our catalog, not every individual App, Ant or Agent.")
+        except (OSError, ValueError, KeyError, TypeError):
+            logger.warning("Product catalog is unavailable; using website retrieval")
     question = clarification(message, history, page_path)
     if question:
         return question
 
     resolved = resolve_followup(message, history, page_path)
     messages = _knowledge_messages(message, history, page_path, resolved)
-    reminded = False
 
     for _ in range(MAX_TOOL_ROUNDS):
         reply = await call_llm(messages)
@@ -427,18 +463,11 @@ async def prepare_answer(
         logger.info("Model returned %s tool call(s)", len(calls))
 
         if not calls:
-            if not reminded:
-                messages.append({"role": "system", "content":
-                    "No website evidence has been retrieved. For an A3i question, call "
-                    "search_a3i_web now, using the question and conversation for context. "
-                    "Do not answer from memory. If unrelated, briefly redirect to A3i."})
-                reminded = True
-                continue
             clearly_a3i = mentioned_topics(resolved) or re.search(
                 r"\b(a3i|a31|apps|ants|agents)\b", resolved, re.I
             )
             if clearly_a3i:
-                logger.info("Using the A3i search fallback after skipped tool calls")
+                logger.info("Using the A3i search fallback after a skipped tool call")
                 calls = [_forced_search_call(resolved)]
                 messages[-1] = {"role": "assistant", "content": "", "tool_calls": calls}
             else:

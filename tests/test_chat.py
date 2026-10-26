@@ -44,9 +44,8 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("flour", answer)
             self.assertIn("A3i", answer)
 
-    async def test_a3i_search_fallback_when_model_skips_tool_twice(self):
+    async def test_a3i_search_fallback_when_model_skips_tool_once(self):
         replies = [{"role": "assistant", "content": "No search"},
-                   {"role": "assistant", "content": "Still no search"},
                    {"role": "assistant", "content": "A3i builds accelerators."}]
         with patch("agent.call_llm", new=AsyncMock(side_effect=replies)), patch("agent.search_a3i_web") as search:
             search.invoke.return_value = {"results": [{"url": "https://a3i-accel.com/", "content": "AI accelerators"}]}
@@ -55,13 +54,12 @@ class ChatTests(unittest.IsolatedAsyncioTestCase):
     async def test_recovers_when_model_initially_skips_search(self):
         replies = [
             {"role": "assistant", "content": "I don't know A3i."},
-            {"role": "assistant", "tool_calls": [{"function": {"name": "search_a3i_web", "arguments": {"query": "A3i"}}}]},
             {"role": "assistant", "content": "A3i builds AI accelerators."},
         ]
         with patch("agent.call_llm", new=AsyncMock(side_effect=replies)) as llm, patch("agent.search_a3i_web") as search:
             search.invoke.return_value = {"results": [{"url": "https://a3i-accel.com/", "content": "AI accelerators"}]}
             self.assertEqual(await chat("What does A3i do?", []), "A3i builds AI accelerators.")
-            self.assertEqual(llm.await_count, 3)
+            self.assertEqual(llm.await_count, 2)
 
     async def test_terminal_chat_does_not_need_fastapi(self):
         import chat_cli

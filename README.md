@@ -352,6 +352,8 @@ Deploy the frontend and backend separately:
 
 ## Current limitations
 
+- `product_catalog.json` stores the named products checked against the official homepage, with descriptions and linked pages. Update its verification date and entries when the website changes. Shared destinations are navigation links, not proof that two names are aliases. Complete-list requests use this catalog without model calls; individual Apps, Ants and Agents are outside its scope.
+- Provider diagnostics record the model, error class, HTTP status and a safe failure category, never arbitrary provider error text. Empty responses try the next provider; Groq cooldown is shared by streaming and non-streaming calls within a process.
 - Retrieval can miss pages or lose context. Update `website_sources.json` if the official website changes its fragments.
 - Prompts and URL filtering are not semantic fact checking. Verbosity, citation formatting, and cross-product inference issues remain in the smoke report.
 - Sessions, the search cache, provider cooldown, and request serialization are per process. Restarting clears memory; multiple workers do not share sessions.

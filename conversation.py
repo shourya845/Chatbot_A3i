@@ -8,6 +8,7 @@ PRODUCTS = (
     "SpeedHire",
     "SpeedRec",
     "Sp3dhire",
+    "Sp33dhire",
     "H3iVE",
     "Send3r",
     "Invenio",
@@ -133,6 +134,10 @@ def clarification(message: str, history: list[dict], page_path: str = "") -> str
 def resolve_followup(message: str, history: list[dict], page_path: str = "") -> str:
     """Add the last clear topic without choosing between ambiguous options."""
     products = mentioned_products(message)
+    if len(products) == 1 and re.fullmatch(r"(?:what about|and)\s+" + re.escape(products[0]) + r"[?!. ]*", message, re.I):
+        previous = next((item["content"] for item in reversed(history[-6:]) if item["role"] == "user"), "")
+        if re.search(r"\b(?:pric(?:e|es|ing)|costs?|plans?|subscriptions?)\b", previous, re.I):
+            return f"{products[0]} pricing: {message}"
     if pricing_overview(message):
         return message
     if not products and re.fullmatch(r"(?:all(?: of them| products)?|every product|each product)[?!. ]*", message, re.I):

@@ -94,8 +94,7 @@ async def main():
             print("Ollama took too long. Close memory-heavy apps and try again.", flush=True)
         except ValueError:
             print(
-                "\nSearch or answer generation failed. "
-                "Check your search configuration and retry.",
+                "\nI couldn't complete your answer right now. Please try again shortly.",
                 flush=True,
             )
         except httpx.HTTPStatusError as exc:
